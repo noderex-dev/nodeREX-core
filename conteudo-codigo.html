@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Repositório de Código</title>
+    <style>
+        body {
+            background-color: #f9f6f0;
+            color: #1a1a1a;
+            font-family: monospace;
+            padding: 10px;
+            margin: 0;
+            font-size: 0.85rem;
+        }
+
+        h3 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+        }
+
+        p {
+            margin: 0 0 10px 0;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* CONTAINER DOS BOTÕES COM ROLAGEM HORIZONTAL COMPACTA */
+        .abas-container {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 4px;
+        }
+
+        /* BOTÕES PEQUENOS E COMPACTOS */
+        .btn-aba {
+            background: #eee6dc;
+            color: #1a1a1a;
+            padding: 4px 8px;
+            text-decoration: none;
+            border: 1px solid #d3cbbd;
+            font-family: monospace;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .btn-aba:hover {
+            background: #2d5a27;
+            color: #fff;
+            border-color: #1a1a1a;
+        }
+
+        /* O VISOR DE CÓDIGO */
+        .visor-codigo {
+            width: 100%;
+            height: 270px;
+            border: 1px solid #d3cbbd;
+            background: #fffdf9;
+        }
+    </style>
+</head>
+<body>
+
+    <h3>Repositório de Código</h3>
+    <p>Selecione o arquivo abaixo para visualizar o conteúdo:</p>
+
+    <!-- MENU DE BOTÕES COMPACTO (Se passar do tamanho, ele rola para o lado sem quebrar o layout) -->
+    <div class="abas-container">
+        <a href="arquivos/indexHTML.txt" target="visor" class="btn-aba">📄 index.html</a>
+        <a href="arquivos/loginHTML.txt" target="visor" class="btn-aba">🎨 login.html</a>
+		<a href="arquivos/chavesJS.txt" target="visor" class="btn-aba">🎨 chaves.js</a>
+        <a href="arquivos/styleCSS.txt" target="visor" class="btn-aba">⚙️ style.css</a>
+		<a href="arquivos/scriptJS.txt" target="visor" class="btn-aba">⚙️ script.js</a>
+		<a href="arquivos/serverJS.txt" target="visor" class="btn-aba">⚙️ server.js</a>
+		<a href="arquivos/packageJSON.txt" target="visor" class="btn-aba">⚙️ package.json</a>
+		<a href="arquivos/package-lockJSON.txt" target="visor" class="btn-aba">⚙️ package-lock.json</a>
+
+	
+        <!-- Adicione quantos arquivos quiser aqui, eles ficam em linha com rolagem automática -->
+    </div>
+
+    <!-- O VISOR -->
+    <iframe name="visor" src="arquivos/indexHTML.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/loginHTML.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/chavesJS.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/styleCSS.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/scriptJS.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/serverJS.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/packageJSON.txt" class="visor-codigo" title="Visor de Código"></iframe>
+	<iframe name="visor" src="arquivos/package-lockJSON.txt" class="visor-codigo" title="Visor de Código"></iframe>
+
+</body>
+</html>

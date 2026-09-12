@@ -1,0 +1,148 @@
+/* --- ESTILO RÚSTICO / MÍNIMO --- */
+:root {
+    --bg-color: #f4f1ea;        /* Tom de papel antigo / cru */
+    --text-color: #1a1a1a;      /* Preto fosco para leitura */
+    --accent-green: #2d5a27;    /* Verde inspirado no logo */
+    --accent-orange: #b35900;   /* Laranja/terroso inspirado no logo */
+    --border-color: #d3cbbd;    /* Linhas pontilhadas ou cinza-terra */
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: monospace, monospace; /* Estilo terminal / código */
+    line-height: 1.6;
+    margin: 0;
+    padding: 40px 20px;
+}
+
+.container {
+    max-width: 700px;
+    margin: 0 auto;
+    background: #fffdf9;
+    padding: 40px;
+    border: 1px solid var(--border-color);
+    box-shadow: 4px 4px 0px var(--border-color);
+}
+
+header {
+    text-align: left;
+}
+
+.logo-area {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.logo-mini {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-orange);
+    object-fit: cover;
+}
+
+h1 {
+    font-size: 2rem;
+    color: var(--accent-green);
+    margin: 0;
+}
+
+.tagline {
+    font-size: 0.9rem;
+    color: var(--accent-orange);
+    margin-top: 5px;
+}
+
+h2 {
+    font-size: 1.2rem;
+    color: var(--accent-green);
+    margin-top: 30px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+p, li {
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
+ul {
+    padding-left: 20px;
+}
+
+hr {
+    border: none;
+    border-top: 1px dashed var(--border-color);
+    margin: 25px 0;
+}
+
+code {
+    background: #eee6dc;
+    padding: 2px 5px;
+    font-size: 0.9rem;
+    color: var(--accent-orange);
+}
+
+/* Botão rústico */
+.btn- rustic, a.btn- rustic {
+    display: inline-block;
+    background-color: var(--accent-green);
+    color: #fff;
+    padding: 10px 15px;
+    text-decoration: none;
+    font-weight: bold;
+    border: 2px solid #1a1a1a;
+    margin-top: 10px;
+    box-shadow: 2px 2px 0px #1a1a1a;
+}
+
+.btn- rustic:hover {
+    background-color: var(--accent-orange);
+}
+
+/* Caixa de imagem rústica */
+.image-box {
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    background: #f9f6f0;
+    text-align: center;
+    margin-top: 15px;
+}
+
+.image-box img {
+    max-width: 100%;
+    max-height: 300px;
+    border: 1px solid var(--border-color);
+    display: block;
+    margin: 0 auto 10px auto;
+}
+
+.legenda {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+}
+
+footer {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #777;
+    margin-top: 40px;
+}
+
+/* --- ESTILO PARA A CAIXA DO ARQUIVO EXTERNO --- */
+.caixa-iframe-container {
+    margin-top: 15px;
+    border: 1px solid var(--border-color);
+    background: #f9f6f0;
+    padding: 10px;
+}
+
+.iframe-codigo {
+    width: 100%;
+    height: 300px;
+    border: none;
+    background: transparent;
+}
