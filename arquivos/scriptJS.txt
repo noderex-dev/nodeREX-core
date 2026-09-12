@@ -1,0 +1,622 @@
+// Conecta ao servidor local do node.REX++ via Socket.io
+const socket = io();
+
+const messagesContainer = document.getElementById('messages-container');
+const messageInput = document.getElementById('message-input');
+const myNameInput = document.getElementById('my-name');
+const myColorInput = document.getElementById('my-color');
+const myAvatarInput = document.getElementById('my-avatar');
+const bgColorPicker = document.getElementById('bg-color-picker');
+const bgImageInput = document.getElementById('bg-image-input');
+const appBgContainer = document.getElementById('app-bg-container');
+const notifSound = document.getElementById('notif-sound');
+let respondingTo = null; // Guarda os dados da mensagem que está sendo respondida
+const serverLogoIcon = document.getElementById('server-logo-icon');
+
+// --- ATUALIZAÇÃO DE PERFIL E USUÁRIOS ONLINE ---
+function enviarDadosUsuario() {
+    socket.emit('atualizar_usuario', {
+        name: myNameInput.value || 'Eu',
+        color: myColorInput.value || '#5865F2',
+        avatar: myAvatarInput.value.trim() || ''
+    });
+}
+
+// Avisa o servidor assim que conecta
+socket.on('connect', () => {
+    enviarDadosUsuario();
+});
+
+// Atualiza sempre que mudar o Nick, Cor ou Foto de Perfil nos inputs rápidos
+myNameInput.addEventListener('input', enviarDadosUsuario);
+myColorInput.addEventListener('input', enviarDadosUsuario);
+myAvatarInput.addEventListener('input', enviarDadosUsuario);
+
+// Recebe a lista de usuários online do servidor e desenha na tela
+socket.on('lista_usuarios_update', (usuarios) => {
+    const container = document.getElementById('online-users-container');
+    if (!container) return;
+
+    if (usuarios.length === 0) {
+        container.innerHTML = '<p style="color: var(--rex-texto-muted); font-size: 12px; padding: 8px;">Ninguém online...</p>';
+        return;
+    }
+
+    let html = '';
+    usuarios.forEach(u => {
+        let avatarStyle = `background-color: ${u.color};`;
+        let avatarContent = u.name ? u.name.charAt(0).toUpperCase() : '?';
+        if (u.avatar) {
+            avatarStyle = `background-image: url('${u.avatar}'); background-color: transparent;`;
+            avatarContent = '';
+        }
+
+        html += `
+            <div class="user-item-online">
+                <div class="user-item-avatar" style="${avatarStyle}">${avatarContent}</div>
+                <div class="user-item-info">
+                    <span class="user-item-name" style="color: ${u.color};">${escapeHtml(u.name)}</span>
+                    <span class="user-item-status"><i class="fa-solid fa-circle" style="font-size: 7px;"></i> ONLINE</span>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+});
+
+window.tempoDeAbertura = Date.now();
+// --- 1. LOGO LOCAL FIXA DO SERVIDOR ---
+serverLogoIcon.style.backgroundImage = "url('logo.png')";
+
+// --- 2. RECUPERA E SALVA NICKNAME ---
+const savedNick = localStorage.getItem('nosso_chat_my_name');
+if (savedNick) myNameInput.value = savedNick;
+
+myNameInput.addEventListener('input', (e) => {
+    localStorage.setItem('nosso_chat_my_name', e.target.value);
+});
+
+// --- 3. RECUPERA E SALVA COR DO NICK ---
+const savedColor = localStorage.getItem('nosso_chat_my_color');
+if (savedColor) myColorInput.value = savedColor;
+
+myColorInput.addEventListener('input', (e) => {
+    localStorage.setItem('nosso_chat_my_color', e.target.value);
+});
+
+// --- 4. RECUPERA E SALVA AVATAR (FOTO DE PERFIL) ---
+const savedAvatar = localStorage.getItem('nosso_chat_my_avatar');
+if (savedAvatar) myAvatarInput.value = savedAvatar;
+
+myAvatarInput.addEventListener('input', (e) => {
+    localStorage.setItem('nosso_chat_my_avatar', e.target.value.trim());
+});
+
+// --- 5. RECUPERA E SALVA FUNDO (COR E IMAGEM) ---
+let savedBgColor = localStorage.getItem('nosso_chat_bg_color') || '#313338';
+let savedBgImage = localStorage.getItem('nosso_chat_bg_image') || '';
+
+bgColorPicker.value = savedBgColor;
+appBgContainer.style.backgroundColor = savedBgColor;
+
+if (savedBgImage) {
+    bgImageInput.value = savedBgImage;
+    appBgContainer.style.backgroundImage = `url('${savedBgImage}')`;
+}
+
+// Salva e aplica a cor de fundo imediatamente ao alterar
+bgColorPicker.addEventListener('input', (e) => {
+    const color = e.target.value;
+    appBgContainer.style.backgroundColor = color;
+    localStorage.setItem('nosso_chat_bg_color', color);
+});
+
+// Salva e aplica a imagem de fundo imediatamente ao alterar
+bgImageInput.addEventListener('input', (e) => {
+    const imgUrl = e.target.value.trim();
+    localStorage.setItem('nosso_chat_bg_image', imgUrl);
+    if (imgUrl) {
+        appBgContainer.style.backgroundImage = `url('${imgUrl}')`;
+    } else {
+        appBgContainer.style.backgroundImage = 'none';
+    }
+});
+
+// --- 6. CONFIGURAÇÕES E ESTADO DO SOM ---
+let customEmojis = JSON.parse(localStorage.getItem('nosso_chat_emojis')) || [ '😂', '🤣', '😝', '🤡', '😡', '😠', '🤬', '😺', '😸', '😹', '🤏', '✌', '👆', '👇', '🖕', '🐔', '🐓', '🔫', '☄', '🪐', '⌛', '⏳', '🚀', '🗾', '🌅', '🌄', '🏔', '⛰', '🌋', '🗻', '🌅', '☃', '⛄', '🔥', '💀', '☠️', '❤️', '🎮', '👀'];
+let settings = JSON.parse(localStorage.getItem('nosso_chat_settings')) || { soundEnabled: true };
+document.getElementById('toggle-sound').checked = settings.soundEnabled;
+
+let unreadCount = 0;
+const originalTitle = document.title;
+// Memória para evitar repetir pop-ups da mesma mensagem
+const mensagensAnunciadas = new Set();
+
+window.isFocused = document.hasFocus();
+window.addEventListener('blur', () => { window.isFocused = false; });
+window.addEventListener('focus', () => { 
+    window.isFocused = true; 
+    unreadCount = 0; 
+    document.title = originalTitle; 
+});
+
+
+// --- 7. ESCUTA EM TEMPO REAL E HISTÓRICO DO SERVIDOR LOCAL (SOCKET.IO) ---
+
+// Recebe o histórico completo salvo no banco quando entra ou dá F5
+socket.on('init_history', (messages) => {
+    messagesContainer.innerHTML = '';
+    messages.forEach(msg => {
+        adicionarMensagemNaTela(msg, false); // false para não tocar som/notificação das mensagens antigas ao carregar
+    });
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+});
+
+// Escuta novas mensagens em tempo real
+socket.on('chat_message', (msg) => {
+    adicionarMensagemNaTela(msg, true); // true para disparar som e notificação se for nova
+});
+
+socket.on('update_reaction', (data) => {
+    const targetMsg = document.getElementById(`msg-${data.messageId}`);
+    if (targetMsg) {
+        let reactionsContainer = targetMsg.querySelector('.reactions-container');
+        if (!reactionsContainer) {
+            reactionsContainer = document.createElement('div');
+            reactionsContainer.className = 'reactions-container';
+            reactionsContainer.style.cssText = 'margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;';
+            targetMsg.querySelector('.message-content').appendChild(reactionsContainer);
+        }
+        const badge = document.createElement('span');
+        badge.style.cssText = 'background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; border: 1px solid rgba(255,255,255,0.1);';
+        badge.innerText = `${data.emoji} 1`;
+        reactionsContainer.appendChild(badge);
+    }
+});
+
+function adicionarMensagemNaTela(msg, dispararNotificacao) {
+    const div = document.createElement('div');
+    div.className = 'message';
+div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
+    
+    let contentHtml = '';
+    const contentStr = typeof msg.content === 'string' ? msg.content.toLowerCase() : '';
+
+    if (msg.type === 'text') {
+        contentHtml = `<div class="message-text">${escapeHtml(msg.content)}</div>`;
+    } 
+    else if (msg.type === 'image' || contentStr.endsWith('.gif') || contentStr.endsWith('.png') || contentStr.endsWith('.jpg') || contentStr.endsWith('.jpeg')) {
+        contentHtml = `<img src="${msg.content}" class="message-img">`;
+    } 
+    else if (msg.type === 'audio' || contentStr.endsWith('.mp3') || contentStr.endsWith('.wav') || contentStr.endsWith('.ogg') || contentStr.endsWith('.m4a')) {
+        contentHtml = `<audio controls src="${msg.content}" class="message-audio" style="width: 100%; max-width: 300px; margin-top: 6px;"></audio>`;
+    } 
+    else if (msg.type === 'video' || contentStr.endsWith('.mp4') || contentStr.endsWith('.webm') || contentStr.endsWith('.mov')) {
+        contentHtml = `
+            <div style="margin-top: 6px;">
+                <video controls style="max-width: 100%; max-height: 250px; border-radius: 8px; border: 2px solid var(--rex-verde-vibrante);">
+                    <source src="${msg.content}">
+                    Seu navegador não suporta vídeos.
+                </video>
+            </div>`;
+    } 
+    else {
+        contentHtml = `
+            <div style="margin-top: 6px; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rex-verde-vibrante);">
+                <a href="${msg.content}" download target="_blank" style="color: var(--rex-laranja); text-decoration: none; font-weight: bold; font-size: 13px;">
+                    📂 Baixar / Visualizar Arquivo Anexado
+                </a>
+            </div>`;
+    }
+
+    // Se a mensagem for uma resposta a outra anterior
+    let replyHtml = '';
+    if (msg.replyTo) {
+        replyHtml = `
+            <div style="background: rgba(0,0,0,0.25); border-left: 3px solid var(--rex-laranja); padding: 4px 8px; margin-bottom: 4px; border-radius: 4px; font-size: 12px;">
+                <span style="color: var(--rex-laranja); font-weight: bold;">${escapeHtml(msg.replyTo.sender)}</span>
+                <p style="color: #bbb; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${escapeHtml(msg.replyTo.content)}</p>
+            </div>
+        `;
+    }
+
+// Bloco de Reações
+    let reactionsHtml = '';
+    const reactions = msg.reactions || {};
+    for (let emoji in reactions) {
+        const count = Array.isArray(reactions[emoji]) ? reactions[emoji].length : reactions[emoji];
+        reactionsHtml += `<span style="background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; border: 1px solid rgba(255,255,255,0.1); margin-right: 4px;">${emoji} ${count}</span>`;
+    }
+
+    let avatarStyle = `background-color: ${msg.color}`;
+    let avatarContent = msg.sender ? msg.sender.charAt(0).toUpperCase() : '?';
+    if (msg.avatar) {
+        avatarStyle = `background-image: url('${msg.avatar}'); background-color: transparent;`;
+        avatarContent = '';
+    }
+
+    div.innerHTML = `
+        <div class="message-avatar" style="${avatarStyle}">${avatarContent}</div>
+        <div class="message-content" style="position: relative; width: 100%;">
+            <div class="message-header">
+                <span class="message-username" style="color: ${msg.color}">${escapeHtml(msg.sender)}</span>
+                <span class="message-time">${msg.time}</span>
+                <!-- Botão discreto para Responder -->
+                <button class="btn-reply-msg" style="background:none; border:none; color:#888; cursor:pointer; font-size:12px; margin-left:8px;" title="Responder mensagem">💬 Responder</button>
+                <!-- Botão rápido de Reagir com ❤️ -->
+                <button class="btn-react-msg" data-emoji="❤️" style="background:none; border:none; cursor:pointer; font-size:12px; margin-left:4px;" title="Reagir com Coração">❤️</button>
+                <button class="btn-react-msg" data-emoji="🔥" style="background:none; border:none; cursor:pointer; font-size:12px; margin-left:2px;" title="Reagir com Fogo">🔥</button>
+                <!-- Botão de Excluir Mensagem -->
+                <button class="btn-delete-msg" style="background:none; border:none; color:#ff5555; cursor:pointer; font-size:12px; margin-left:6px;" title="Excluir mensagem">🗑️ Excluir</button>
+            </div>
+            ${replyHtml}
+            ${contentHtml}
+            <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">${reactionsHtml}</div>
+        </div>
+    `;
+
+    // Evento para o botão de excluir
+    div.querySelector('.btn-delete-msg').addEventListener('click', () => {
+        if (confirm("Tem certeza que deseja excluir esta mensagem?")) {
+            const messageId = msg.id || (msg.time + msg.sender).replace(/\s+/g, '');
+            socket.emit('delete_message', messageId);
+        }
+    });
+
+    // Evento para o botão de responder
+    div.querySelector('.btn-reply-msg').addEventListener('click', () => {
+        respondingTo = {
+            sender: msg.sender,
+            content: msg.type === 'text' ? msg.content : '[Mídia/Arquivo]'
+        };
+        document.getElementById('reply-preview-user').innerText = `Respondendo a ${msg.sender}`;
+        document.getElementById('reply-preview-text').innerText = respondingTo.content;
+        document.getElementById('reply-preview-container').style.display = 'flex';
+        messageInput.focus();
+    });
+
+    // Eventos para os botões de reação rápida
+    div.querySelectorAll('.btn-react-msg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.getAttribute('data-emoji');
+            // Envia evento de reação para o servidor (ou atualiza local)
+            socket.emit('add_reaction', { messageId: msg.id || msg.time + msg.sender, emoji, user: myNameInput.value || 'Eu' });
+        });
+    });
+    
+    let isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 100;
+    messagesContainer.appendChild(div);
+
+    if (isAtBottom) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    if (dispararNotificacao) {
+        const acabouDeAbrir = (Date.now() - window.tempoDeAbertura) < 2000;
+        const msgId = `${msg.sender}_${msg.content}_${msg.time}`;
+
+        if (msg.sender !== (myNameInput.value || 'Eu') && !acabouDeAbrir && !mensagensAnunciadas.has(msgId)) {
+            mensagensAnunciadas.add(msgId);
+            if (settings.soundEnabled) {
+                notifSound.currentTime = 0;
+                notifSound.play().catch(e => console.log("Áudio bloqueado"));
+            }
+            if (!window.isFocused) {
+                unreadCount++;
+                document.title = `🔔 (${unreadCount}) Nova mensagem!`;
+            }
+        }
+    }
+}
+
+// --- 8. ENVIO DE MENSAGEM POR ENTER ---
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && messageInput.value.trim() !== '') {
+        sendTextMessage(messageInput.value.trim());
+        messageInput.value = '';
+    }
+});
+
+function sendTextMessage(text) {
+    const msg = {
+        id: Date.now().toString(),
+        type: 'text',
+        sender: myNameInput.value || 'Eu',
+        color: myColorInput.value || '#5865F2',
+        avatar: myAvatarInput.value.trim() || '',
+        content: text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        replyTo: respondingTo // Anexa a resposta se houver
+    };
+    publishMessage(msg);
+    limparResposta();
+}
+
+// Botão de cancelar a resposta selecionada
+document.getElementById('cancel-reply').addEventListener('click', limparResposta);
+
+function limparResposta() {
+    respondingTo = null;
+    document.getElementById('reply-preview-container').style.display = 'none';
+}
+
+function publishMessage(msg) {
+    socket.emit('chat_message', msg);
+}
+
+// --- 9. ENVIO DE MENSAGENS, IMAGENS E MÍDIAS ---
+const inputFile = document.getElementById('input-file');
+inputFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const fileName = file.name.toLowerCase();
+            let fileType = 'file'; // tipo padrão para arquivos genéricos (.txt, etc)
+
+            // Descobre o tipo correto baseado na extensão do arquivo enviado
+            if (fileName.endsWith('.mp4') || fileName.endsWith('.webm') || fileName.endsWith('.mov')) {
+                fileType = 'video';
+            } else if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.ogg') || fileName.endsWith('.m4a')) {
+                fileType = 'audio';
+            } else if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.gif')) {
+                fileType = 'image';
+            }
+
+            const msg = {
+                type: fileType,
+                sender: myNameInput.value || 'Eu',
+                color: myColorInput.value || '#5865F2',
+                avatar: myAvatarInput.value.trim() || '',
+                content: event.target.result,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            publishMessage(msg);
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// --- 10. GRAVAÇÃO DE ÁUDIO ---
+let mediaRecorder;
+let audioChunks = [];
+const btnAudio = document.getElementById('btn-audio');
+const audioStatus = document.getElementById('audio-status');
+
+btnAudio.addEventListener('click', async () => {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = function() {
+                    const msg = {
+                        type: 'audio',
+                        sender: myNameInput.value || 'Eu',
+                        color: myColorInput.value || '#5865F2',
+                        avatar: myAvatarInput.value.trim() || '',
+                        content: reader.result,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        
+                    };
+                    publishMessage(msg);
+                };
+                audioStatus.innerText = '';
+            };
+
+            mediaRecorder.start();
+            audioStatus.innerText = '🔴 Gravando áudio... (Clique de novo para enviar)';
+        } catch (err) {
+            alert('Permissão de microfone negada ou indisponível.');
+        }
+    } else {
+        mediaRecorder.stop();
+    }
+});
+
+// --- 11. PORTABILIDADE (.TXT) ---
+document.getElementById('btn-export').addEventListener('click', () => {
+    const messageElements = messagesContainer.querySelectorAll('.message');
+    let txtContent = "=== HISTÓRICO DE MENSAGENS NODE.REX++ ===\n\n";
+    
+    messageElements.forEach(el => {
+        const user = el.querySelector('.message-username')?.innerText || "Desconhecido";
+        const time = el.querySelector('.message-time')?.innerText || "";
+        const text = el.querySelector('.message-text')?.innerText || "[Mídia/Áudio]";
+        txtContent += `[${time}] ${user}: ${text}\n`;
+    });
+
+    const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.href = url;
+    downloadAnchor.download = `historico_chat_${new Date().toISOString().slice(0,10)}.txt`;
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById('input-import').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                sendTextMessage(`[Importou um arquivo de histórico .txt]`);
+                alert('Aviso de importação enviado ao chat!');
+            } catch (err) {
+                alert('Erro ao ler o arquivo .txt.');
+            }
+        };
+        reader.readAsText(file);
+    }
+});
+
+// --- 12. MODAIS (EMOJIS E CONFIGURAÇÕES) ---
+const emojiModal = document.getElementById('emoji-modal');
+document.getElementById('btn-emoji-menu').addEventListener('click', () => {
+    loadEmojisUI();
+    emojiModal.classList.remove('hidden');
+});
+document.getElementById('close-modal').addEventListener('click', () => {
+    emojiModal.classList.add('hidden');
+});
+
+function loadEmojisUI() {
+    const emojiList = document.getElementById('emoji-list');
+    emojiList.innerHTML = '';
+    customEmojis.forEach(em => {
+        const span = document.createElement('span');
+        span.className = 'custom-emoji-item';
+        span.innerText = em;
+        span.onclick = () => {
+            messageInput.value += em;
+            emojiModal.classList.add('hidden');
+        };
+        emojiList.appendChild(span);
+    });
+}
+
+document.getElementById('btn-save-emoji').addEventListener('click', () => {
+    const newEmoji = document.getElementById('new-emoji-url').value.trim();
+    if (newEmoji) {
+        customEmojis.push(newEmoji);
+        localStorage.setItem('nosso_chat_emojis', JSON.stringify(customEmojis));
+        document.getElementById('new-emoji-url').value = '';
+        loadEmojisUI();
+    }
+});
+
+const settingsModal = document.getElementById('settings-modal');
+document.getElementById('btn-open-settings').addEventListener('click', () => {
+    settingsModal.classList.remove('hidden');
+});
+document.getElementById('close-settings').addEventListener('click', () => {
+    settings.soundEnabled = document.getElementById('toggle-sound').checked;
+    localStorage.setItem('nosso_chat_settings', JSON.stringify(settings));
+    settingsModal.classList.add('hidden');
+});
+
+function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+
+
+// --- 13. LISTAGEM AUTOMÁTICA DA PASTA DE MÍDIAS ---
+function carregarListaDeMidias() {
+    fetch('/api/midias')
+        .then(res => res.json())
+        .then(arquivos => {
+            const container = document.getElementById('folder-files-list');
+            if (!container) return;
+
+            if (arquivos.length === 0) {
+                container.innerHTML = '<p style="color: var(--rex-texto-muted); font-style: italic;">Nenhum arquivo na pasta ainda.</p>';
+                return;
+            }
+
+            let html = '';
+            arquivos.forEach(arquivo => {
+                html += `
+                    <div style="background: var(--rex-escuro); padding: 12px 16px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #fff; font-size: 14px;"><i class="fas fa-file-alt" style="margin-right: 8px; color: var(--rex-laranja);"></i> ${arquivo}</span>
+                        <a href="/public_midia/${arquivo}" download target="_blank" style="background: var(--rex-laranja); color: #fff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 13px;">Baixar / Ver</a>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        })
+        .catch(err => console.error("Erro ao carregar mídias:", err));
+}
+
+// Lógica para alternar entre o Chat Geral e a Pasta de Mídias
+document.addEventListener("click", function(e) {
+    const channelItem = e.target.closest(".channel-item");
+    if (!channelItem) return;
+
+    // Remove a classe active de todos e coloca no clicado
+    document.querySelectorAll(".channel-item").forEach(item => item.classList.remove("active"));
+    channelItem.classList.add("active");
+
+    const channelName = channelItem.textContent.trim().toLowerCase();
+    const chatMessagesContainer = document.querySelector(".messages-container");
+    const chatInputArea = document.querySelector(".chat-input-area");
+    const chatHeaderName = document.querySelector(".chat-name");
+    const chatDesc = document.querySelector(".chat-desc");
+    const folderPanel = document.getElementById("media-folder-panel");
+
+    if (channelName.includes("midia-e-audios")) {
+        if (chatMessagesContainer) chatMessagesContainer.style.display = "none";
+        if (chatInputArea) chatInputArea.style.display = "none";
+        
+        if (folderPanel) {
+            folderPanel.style.display = "flex";
+            folderPanel.classList.remove("hidden");
+        }
+
+        if (chatHeaderName) chatHeaderName.textContent = "mídia-e-áudios";
+        if (chatDesc) chatDesc.textContent = "| Pasta Compartilhada de Arquivos";
+        
+        carregarListaDeMidias();
+        
+    } else if (channelName.includes("geral")) {
+        if (chatMessagesContainer) chatMessagesContainer.style.display = "flex";
+        if (chatInputArea) chatInputArea.style.display = "block";
+        
+        if (folderPanel) {
+            folderPanel.style.display = "none";
+            folderPanel.classList.add("hidden");
+        }
+
+        if (chatHeaderName) chatHeaderName.textContent = "geral";
+        if (chatDesc) chatDesc.textContent = "| Chat node.REX++ 2026";
+    }
+	
+	if (e.target.closest('#canal-voz')) {
+    iniciarCanalDeVoz();
+}
+	
+});
+
+let localStream;
+let peerConnection;
+
+async function iniciarCanalDeVoz() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        document.getElementById('painel-voz').style.display = 'block';
+        
+        // Inicializa a conexão com o socket para o WebRTC
+        socket.emit('entrar-voz');
+    } catch (err) {
+        console.error("Erro ao acessar o microfone:", err);
+    }
+}
+
+document.getElementById('btn-desconectar-voz').addEventListener('click', () => {
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    document.getElementById('painel-voz').style.display = 'none';
+    socket.emit('sair-voz');
+});
+
+// Ouve o servidor quando uma mensagem for deletada
+socket.on('message_deleted', (messageId) => {
+    const targetMsg = document.getElementById(`msg-${messageId}`);
+    if (targetMsg) {
+        targetMsg.remove();
+    }
+});

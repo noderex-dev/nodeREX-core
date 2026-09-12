@@ -1,0 +1,240 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const sqlite3 = require('sqlite3').verbose();
+
+// >>> PALAVRA-CHAVE NO NOTEPAD++: GOOGLE_AI_SETUP
+const { GoogleGenAI } = require('@google/genai');
+const ai = new GoogleGenAI({ apiKey: 'SUA CHAVE API AQUI' });
+
+// Função que faz a IA responder lendo o histórico completo da conversa
+async function perguntarParaAmiga(historicoDoChat, mensagemDoUsuario) {
+    try {
+        const promptDoSistema = "Você é uma amiga muito amigável, brincalhona, super tagarela e adora conversar bastante. Você está em um chat chamado node.REX++. Responda de forma natural, descontraída, mantendo o contexto de tudo o que está sendo conversado na conversa.";
+
+        // Usamos o formato estruturado correto exigido pelo SDK do Gemini
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        { text: promptDoSistema },
+                        { text: "Histórico recente do chat:\n" + historicoDoChat },
+                        { text: "Mensagem atual do usuário: " + mensagemDoUsuario }
+                    ]
+                }
+            ],
+            config: {
+                maxOutputTokens: 800,
+                temperature: 0.7
+            }
+        });
+
+        // Garantimos a extração correta do texto da resposta
+        return response.text;
+    } catch (error) {
+        console.error("Erro real na API do Gemini:", error);
+        // Deixando o erro exposto no chat temporariamente se quiser debugar, 
+        // ou mantendo a frase, mas agora vai passar direto daqui.
+        return "ERRO DO SISTEMA: " + error.message;
+    }
+}
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    maxHttpBufferSize: 1e8 // 100MB para imagens e áudios[cite: 3]
+});
+
+// Configura o Banco de Dados Local (Arquivo chat.db)
+const db = new sqlite3.Database('./chat.db', (err) => {
+    if (err) console.error('Erro ao abrir o banco de dados', err.message);
+    else console.log('Conectado ao banco de dados local SQLite.');
+});
+
+// Cria a tabela de mensagens se ela não existir
+db.run(`CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT,
+    sender TEXT,
+    color TEXT,
+    avatar TEXT,
+    content TEXT,
+    time TEXT
+)`);
+
+// Cria a tabela de reações se ela não existir
+db.run(`CREATE TABLE IF NOT EXISTS reactions (
+    messageId TEXT,
+    emoji TEXT,
+    user TEXT
+)`);
+
+app.use(express.static(__dirname));
+
+app.use('/midias', express.static('public_midia')); // <- Código de Pasta
+
+const fs = require('fs');
+const path = require('path');
+
+// Rota que lista os arquivos que você colocou na pasta public_midia
+app.get('/api/midias', (req, res) => {
+    const diretorioPasta = path.join(__dirname, 'public_midia');
+    fs.readdir(diretorioPasta, (err, arquivos) => {
+        if (err) {
+            return res.status(500).json({ erro: 'Erro ao ler a pasta' });
+        }
+        res.json(arquivos);
+    });
+});
+
+// Lista em memória para guardar os usuários conectados
+let usuariosOnline = {};
+
+io.on('connection', (socket) => {
+    console.log('Um usuário se conectou ao servidor.');
+
+    // O usuário avisa seu nick/foto assim que conecta ou atualiza os inputs
+    socket.on('atualizar_usuario', (userData) => {
+        usuariosOnline[socket.id] = {
+            id: socket.id,
+            name: userData.name || 'Anônimo',
+            color: userData.color || '#5865F2',
+            avatar: userData.avatar || ''
+        };
+        io.emit('lista_usuarios_update', Object.values(usuariosOnline));
+    });
+
+    // Envia o histórico completo com as reações salvas assim que entra ou dá F5
+    db.all(`SELECT * FROM messages ORDER BY id ASC`, [], (err, messages) => {
+        if (err) return;
+        db.all(`SELECT * FROM reactions`, [], (errReactions, reactions) => {
+            if (!errReactions) {
+                messages.forEach(msg => {
+                    msg.reactions = {};
+                    reactions.forEach(r => {
+                        if (r.messageId == msg.id || r.messageId == (msg.time + msg.sender)) {
+                            if (!msg.reactions[r.emoji]) {
+                                msg.reactions[r.emoji] = [];
+                            }
+                            msg.reactions[r.emoji].push(r.user);
+                        }
+                    });
+                });
+            }
+            socket.emit('init_history', messages);
+            // Envia também a lista de online atual para quem acabou de entrar
+            socket.emit('lista_usuarios_update', Object.values(usuariosOnline));
+        });
+    });
+
+    // Quando receber uma mensagem, salva no banco e reenvia para todos
+    socket.on('chat_message', (msgData) => {
+        const query = `INSERT INTO messages (type, sender, color, avatar, content, time) VALUES (?, ?, ?, ?, ?, ?)`;
+        const params = [msgData.type, msgData.sender, msgData.color, msgData.avatar, msgData.content, msgData.time];
+
+        db.run(query, params, async function(err) {
+            if (!err) {
+                io.emit('chat_message', { id: this.lastID, ...msgData });
+				
+				if (msgData.content && msgData.content.toLowerCase().includes('@ia')) {
+                    db.all(`SELECT sender, content FROM messages ORDER BY id DESC LIMIT 10`, [], async (err, rows) => {
+                        let historicoTexto = "";
+                        if (!err && rows) {
+                            rows.reverse();
+                            historicoTexto = rows.map(r => `${r.sender}: ${r.content}`).join("\n");
+                        }
+                        const textoLimpo = msgData.content.replace(/@ia/gi, '').trim();
+                        const respostaDaIA = await perguntarParaAmiga(historicoTexto, textoLimpo);
+                        const horaAtual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                        const msgDaIA = {
+                            type: 'text',
+                            sender: 'perplexada',
+                            color: '#ff79c6',
+                            avatar: 'perplexada.jpg',
+                            content: respostaDaIA,
+                            time: horaAtual
+                        };
+
+                        db.run(`INSERT INTO messages (type, sender, color, avatar, content, time) VALUES (?, ?, ?, ?, ?, ?)`, 
+                            [msgDaIA.type, msgDaIA.sender, msgDaIA.color, msgDaIA.avatar, msgDaIA.content, msgDaIA.time], 
+                            function(errIA) {
+                                if (!errIA) {
+                                    io.emit('chat_message', { id: this.lastID, ...msgDaIA });
+                                }
+                            }
+                        );
+                    });
+				}
+            }
+        });
+    });
+
+    socket.on('add_reaction', (data) => {
+        const query = `INSERT INTO reactions (messageId, emoji, user) VALUES (?, ?, ?)`;
+        db.run(query, [data.messageId, data.emoji, data.user], (err) => {
+            if (!err) {
+                io.emit('update_reaction', data);
+            }
+        });
+    });
+	
+	// Evento para excluir mensagem do chat e do banco SQLite
+    socket.on('delete_message', (messageId) => {
+        // Apaga do banco de mensagens
+        db.run(`DELETE FROM messages WHERE id = ?`, [messageId], (err) => {
+            if (err) {
+                console.error("Erro ao deletar mensagem do banco:", err.message);
+                return;
+            }
+            
+            // Apaga também as reações vinculadas a essa mensagem para limpar o banco
+            db.run(`DELETE FROM reactions WHERE messageId = ?`, [messageId], () => {
+                // Avisa todos os clientes conectados (incluindo quem enviou) para sumir com a mensagem da tela
+                io.emit('message_deleted', messageId);
+            });
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Um usuário se desconectou.');
+        delete usuariosOnline[socket.id];
+        io.emit('lista_usuarios_update', Object.values(usuariosOnline));
+    });
+	
+	
+	
+	
+	socket.on('entrar-voz', () => {
+        socket.broadcast.emit('usuario-entrou-voz', socket.id);
+    });
+
+    socket.on('sair-voz', () => {
+        socket.broadcast.emit('usuario-saiu-voz', socket.id);
+    });
+
+    socket.on('offer', (data) => {
+        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id });
+    });
+
+    socket.on('answer', (data) => {
+        socket.to(data.target).emit('answer', { answer: data.answer, sender: socket.id });
+    });
+
+    socket.on('candidate', (data) => {
+        socket.to(data.target).emit('candidate', { candidate: data.candidate, sender: socket.id });
+    });
+	
+	
+	
+	
+	
+	
+	
+});
+
+server.listen(3000, () => {
+    console.log('Servidor rodando na porta http://localhost:3000');
+});

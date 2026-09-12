@@ -1,0 +1,2 @@
+O package-lock.json não é necessário enviar; ele é gerado 
+automaticamente no seu computador quando você roda o npm install.

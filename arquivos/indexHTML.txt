@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">node.REX++</title>
+	
+	<script>
+        // Trava de segurança: Se não estiver logado, chuta pro login.html
+        const sessaoAtiva = localStorage.getItem("sessao_node_rex");
+        if (!sessaoAtiva) {
+            window.location.href = "login.html";
+        }
+    </script>
+	
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome para ícones nostálgicos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+	
+	<!-- Script do Socket.io fornecido pelo seu servidor local -->
+    <script src="/socket.io/socket.io.js"></script>
+	
+	<link rel="icon" type="image/png" href="logo.png">
+	
+</head>
+<body>
+
+    <div class="app-container" id="app-bg-container">
+        <!-- Barra Lateral (Servidor com Logo Customizável) -->
+        <aside class="sidebar">
+            <div class="server-icon active" id="server-logo-icon" title="Nosso Refúgio"></div>
+            <div class="server-divider"></div>
+            <!-- Botão de Configurações Funcional -->
+            <div class="server-icon" id="btn-open-settings" title="Configurações"><i class="fa-solid fa-gear"></i></div>
+        </aside>
+
+        <!-- Painel de Canais / Ações de Backup -->
+        <aside class="channels-panel">
+            <div class="server-header">
+                <h3 id="server-title-text">node.REX++</h3>
+            </div>
+            <div class="channels-list">
+			
+			<div class="channel-item voice-channel" id="canal-voz">
+				<i class="fas fa-volume-up"></i> Canal de Voz
+			</div>
+			
+                <div class="channel-item active"><i class="fa-solid fa-hashtag"></i> geral</div>
+                <div class="channel-item"><i class="fa-solid fa-hashtag"></i> midia-e-audios</div>
+            </div>
+            
+            <!-- Bloco de Portabilidade (.txt) -->
+            <div class="backup-section">
+                <span class="backup-title"><i class="fa-solid fa-database"></i> Memória do Chat</span>
+                <button id="btn-export" class="btn-backup"><i class="fa-solid fa-download"></i> Salvar Tudo (.txt)</button>
+                <label for="input-import" class="btn-backup upload-btn">
+                    <i class="fa-solid fa-upload"></i> Upar Histórico (.txt)
+                </label>
+                <input type="file" id="input-import" accept=".txt" style="display: none;">
+            </div>
+        </aside>
+
+
+        <!-- Área Principal do Chat -->
+        <main class="chat-area">
+		
+		
+		<div id="painel-voz" class="voice-panel" style="display: none;">
+    <h3>Canal de Voz Conectado</h3>
+    <div id="participantes-voz"></div>
+    <button id="btn-desconectar-voz" class="btn-danger">Desconectar</button>
+</div>
+		
+		
+		<!-- PAINEL DE PASTAS / MÍDIAS (Oculto por padrão) -->
+    <div id="media-folder-panel" class="hidden" style="flex: 1; display: flex; flex-direction: column; background: var(--rex-painel); padding: 24px; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--rex-laranja); padding-bottom: 12px; margin-bottom: 20px;">
+            <h2 style="color: var(--rex-laranja); font-size: 20px;"><i class="fas fa-folder-open"></i> Pasta: Mídias e Áudios</h2>
+            <span style="font-size: 13px; color: var(--rex-texto-muted);">Arquivos compartilhados do Node.Rex</span>
+        </div>
+
+
+        <!-- Lista de arquivos dentro da pasta -->
+        <div id="folder-files-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <p style="color: var(--rex-texto-muted); font-style: italic;">Nenhum arquivo na pasta ainda. Envie o primeiro!</p>
+        </div>
+    </div>
+		
+            <header class="chat-header">
+                <div class="channel-info">
+                    <span class="chat-symbol">#</span>
+                    <span class="chat-name">geral</span>
+                    <span class="chat-desc">| Chat node.REX++ 2026</span>
+                </div>
+                <!-- Perfil Rápido: Nick, Cor, Foto, Logo do Servidor e Fundo do Chat -->
+                <div class="user-quick-settings">
+                    <input type="text" id="my-name" placeholder="Seu Nick" title="Seu Nickname">
+                    <input type="color" id="my-color" value="#5865F2" title="Cor do seu Nick">
+                    <input type="text" id="my-avatar" placeholder="URL da Foto (op." title="Link da sua Foto de Perfil">
+                    <div class="bg-picker-wrapper" title="Fundo (Cor ou Link de Imagem)">
+                        <label for="bg-color-picker">Fundo:</label>
+                        <input type="color" id="bg-color-picker" value="#313338">
+                        <input type="text" id="bg-image-input" placeholder="URL Imagem Fundo" style="width: 90px; font-size: 11px; background: #1e1f22; border: none; color: #fff; padding: 3px; border-radius: 4px;">
+                    </div>
+                </div>
+            </header>
+
+            <!-- Lista de Mensagens -->
+            <div class="messages-container" id="messages-container">
+                <!-- As mensagens entram aqui dinamicamente -->
+            </div>
+
+<!-- CAIXINHA DE RESPOSTA ATIVA (ESTILO WHATSAPP/DISCORD) -->
+        <div id="reply-preview-container" class="hidden" style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-left: 4px solid var(--rex-laranja); margin: 0 16px 8px 16px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <span id="reply-preview-user" style="color: var(--rex-laranja); font-weight: bold; font-size: 12px;">Respondendo a alguém</span>
+                <p id="reply-preview-text" style="color: #ccc; font-size: 13px; margin: 2px 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px;"></p>
+            </div>
+            <button id="cancel-reply" style="background: none; border: none; color: #aaa; cursor: pointer; font-size: 16px;" title="Cancelar Resposta">&times;</button>
+        </div>
+
+
+            <!-- Caixa de Envio -->
+            <div class="chat-input-area">
+                <div class="input-wrapper">
+                    <!-- Botões de Mídia -->
+                    <label for="input-file" class="media-btn" title="Enviar Imagem/Arquivo"><i class="fa-solid fa-plus"></i></label>
+                    <input type="file" id="input-file" style="display: none;">
+
+                    <input type="text" id="message-input" placeholder="Conversar em #geral..." autocomplete="off">
+
+                    <!-- Botão de Gravar Áudio -->
+                    <button id="btn-audio" class="media-btn" title="Segurar/Clicar para Gravar Áudio"><i class="fa-solid fa-microphone"></i></button>
+                    
+                    <!-- Botão de Emojis Customizados -->
+                    <button id="btn-emoji-menu" class="media-btn" title="Emojis"><i class="fa-regular fa-face-smile"></i></button>
+                </div>
+                <span class="typing-indicator" id="audio-status"></span>
+            </div>
+        </main>
+		
+		
+			<!-- Painel Direito de Usuários Online -->
+        <aside class="users-panel">
+            <div class="users-header">
+                <h3><i class="fa-solid fa-users"></i> Online</h3>
+            </div>
+            <div class="users-list" id="online-users-container">
+                <!-- Os usuários conectados aparecem aqui dinamicamente -->
+            </div>
+        </aside>
+		
+    </div>
+
+
+    <!-- Modal de Emojis Customizados -->
+    <div id="emoji-modal" class="modal hidden">
+        <div class="modal-content">
+            <h4>Painel de Emojis & Reações</h4>
+            <div id="emoji-list" class="emoji-grid"></div>
+            <div class="add-custom-emoji">
+                <input type="text" id="new-emoji-url" placeholder="URL da Imagem ou Emoji URL">
+                <button id="btn-save-emoji">Criar Emoji</button>
+            </div>
+            <button id="close-modal" class="btn-close-modal">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal de Configurações -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h4><i class="fa-solid fa-gear"></i> Configurações do Cantinho</h4>
+            <div class="setting-option">
+                <label>
+                    <input type="checkbox" id="toggle-sound" checked> Ativar som de notificação de mensagem
+                </label>
+            </div>
+            <button id="close-settings" class="btn-close-modal">Salvar e Fechar</button>
+        </div>
+    </div>
+
+    <!-- Elemento de Áudio para o Sonzinho de Notificação -->
+    <audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
+    <!-- Usando type="module" para suportar a importação do Firebase no script.js -->
+    <script src="script.js"></script>
+</body>
+</html>
