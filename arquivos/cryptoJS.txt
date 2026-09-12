@@ -1,4 +1,4 @@
-// crypto.js - Motor de Criptografia Compartilhado
+// crypto.js - Motor de Criptografia Total (Textos, Imagens, Áudios e Arquivos)
 async function obterChaveSimetrica() {
     const senhaSecreta = "node_rex_chave_mestra_2026";
     const encoder = new TextEncoder();
@@ -15,22 +15,30 @@ async function obterChaveSimetrica() {
     );
 }
 
-async function criptografarTexto(textoPuro) {
-    if (!textoPuro) return "";
+// Criptografa tanto texto puro quanto arquivos/imagens em formato string ou bytes
+async function criptografarTexto(dadosPuros) {
+    if (!dadosPuros) return "";
     const chave = await obterChaveSimetrica();
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(textoPuro);
+    
+    // Converte para bytes se for string (seja texto comum ou base64 de imagem/arquivo)
+    const encoded = typeof dadosPuros === 'string' 
+        ? new TextEncoder().encode(dadosPuros) 
+        : dadosPuros;
+
     const ciphertext = await window.crypto.subtle.encrypt(
         { name: "AES-GCM", iv: iv },
         chave,
         encoded
     );
+
     const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
     combined.set(iv);
     combined.set(new Uint8Array(ciphertext), iv.length);
     return btoa(String.fromCharCode(...combined));
 }
 
+// Descriptografa e reconstrói o texto ou o arquivo original perfeitamente
 async function descriptografarTexto(textoCifradoBase64) {
     try {
         if (!textoCifradoBase64 || !textoCifradoBase64.startsWith("ENCRYPTED:")) {
@@ -41,13 +49,15 @@ async function descriptografarTexto(textoCifradoBase64) {
         const combined = new Uint8Array(atob(limpo).split("").map(c => c.charCodeAt(0)));
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
+        
         const decrypted = await window.crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv },
             chave,
             ciphertext
         );
+        
         return new TextDecoder().decode(decrypted);
     } catch (e) {
-        return "[Mensagem criptografada ou chave incompatível]";
+        return "[Arquivo ou Mensagem criptografada / Chave incompatível]";
     }
 }
