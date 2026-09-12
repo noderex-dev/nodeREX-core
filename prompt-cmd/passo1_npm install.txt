@@ -1,0 +1,5 @@
+npm install
+
+OBS.: Precisa já ter o Node.js instalado no 
+computador (vindo de nodejs.org),
+senão o passo1 e o passo2 não vão rodar
