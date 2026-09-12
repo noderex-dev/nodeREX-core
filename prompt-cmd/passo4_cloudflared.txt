@@ -1,0 +1,7 @@
+cloudflared.exe tunnel --url http://localhost:3000
+
+OBS.: Baixe o cloudflared executável (.exe) no site
+Oficial e salve dentro da pasta onde estão os
+arquivos. Renomeie para cloudflared.exe para
+que o comando no prompt funcione e crie o
+tunnel

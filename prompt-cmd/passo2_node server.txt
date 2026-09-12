@@ -1,0 +1,3 @@
+node server.js
+
+OBS.: Comando para deixar o seu Chat online.
