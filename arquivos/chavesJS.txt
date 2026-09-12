@@ -1,0 +1,16 @@
+// Arquivo: chaves.js
+
+// 1. BANCO DE CHAVES ATIVAS (Chaves que clientes já estão usando)
+
+const BANCO_DE_CHAVES = {
+    "exemplo_usuario1": {
+        senha: "1234",
+        dataCriacao: "2026-09-05",
+        diasValidade: 30 // APÓS a data estabelecida e ultrapassado o DIA, o Usuário e sua Senha não funcionarão mais. Tem que ALTERAR SEMPRE que expirar. Aqui você pode BANIR TAMBÉM PESSOAS IMPEDINDO DELA (AS) ENTRAR.
+    },
+    "exemplo_usuario2": {
+        senha: "1234",
+        dataCriacao: "2026-09-05",
+        diasValidade: 30 // APÓS a data estabelecida e ultrapassado o DIA, o Usuário e sua Senha não funcionarão mais. Tem que ALTERAR SEMPRE que expirar. Aqui você pode BANIR TAMBÉM PESSOAS IMPEDINDO DELA (AS) ENTRAR.
+    }
+};
