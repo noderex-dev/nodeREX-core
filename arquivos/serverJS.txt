@@ -5,7 +5,8 @@ const sqlite3 = require('sqlite3').verbose();
 
 // >>> PALAVRA-CHAVE NO NOTEPAD++: GOOGLE_AI_SETUP
 const { GoogleGenAI } = require('@google/genai');
-const ai = new GoogleGenAI({ apiKey: 'SUA CHAVE API AQUI' });
+// Substitua 'SUA_API_KEY_AQUI' pela sua chave da API do Google Gemini quando for usar
+const ai = new GoogleGenAI({ apiKey: 'SUA_API_KEY_AQUI' });
 
 // Função que faz a IA responder lendo o histórico completo da conversa
 async function perguntarParaAmiga(historicoDoChat, mensagemDoUsuario) {
@@ -74,6 +75,26 @@ db.run(`CREATE TABLE IF NOT EXISTS reactions (
 app.use(express.static(__dirname));
 
 app.use('/midias', express.static('public_midia')); // <- Código de Pasta
+
+// Configuração da Pasta de Emojis REX
+app.use('/emojisREX', express.static('emojisREX'));
+
+app.get('/api/emojis-rex', (req, res) => {
+    const diretorioEmojis = path.join(__dirname, 'emojisREX');
+    
+    if (!fs.existsSync(diretorioEmojis)) {
+        fs.mkdirSync(diretorioEmojis, { recursive: true });
+    }
+
+    fs.readdir(diretorioEmojis, (err, arquivos) => {
+        if (err) {
+            return res.status(500).json({ erro: 'Erro ao ler a pasta de emojis' });
+        }
+        // Filtra apenas imagens para aparecerem no painel
+        const imagens = arquivos.filter(file => /\.(png|gif|webp|jpg|jpeg)$/i.test(file));
+        res.json(imagens);
+    });
+});
 
 const fs = require('fs');
 const path = require('path');

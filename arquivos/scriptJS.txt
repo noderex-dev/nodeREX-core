@@ -462,38 +462,56 @@ document.getElementById('input-import').addEventListener('change', (e) => {
 
 // --- 12. MODAIS (EMOJIS E CONFIGURAÇÕES) ---
 const emojiModal = document.getElementById('emoji-modal');
+
 document.getElementById('btn-emoji-menu').addEventListener('click', () => {
-    loadEmojisUI();
+    carregarEmojisDaPasta();
     emojiModal.classList.remove('hidden');
 });
+
 document.getElementById('close-modal').addEventListener('click', () => {
     emojiModal.classList.add('hidden');
 });
 
-function loadEmojisUI() {
-    const emojiList = document.getElementById('emoji-list');
-    emojiList.innerHTML = '';
-    customEmojis.forEach(em => {
-        const span = document.createElement('span');
-        span.className = 'custom-emoji-item';
-        span.innerText = em;
-        span.onclick = () => {
-            messageInput.value += em;
-            emojiModal.classList.add('hidden');
-        };
-        emojiList.appendChild(span);
-    });
-}
+function carregarEmojisDaPasta() {
+    fetch('/api/emojis-rex')
+        .then(res => res.json())
+        .then(arquivos => {
+            const emojiList = document.getElementById('emoji-list');
+            emojiList.innerHTML = '';
 
-document.getElementById('btn-save-emoji').addEventListener('click', () => {
-    const newEmoji = document.getElementById('new-emoji-url').value.trim();
-    if (newEmoji) {
-        customEmojis.push(newEmoji);
-        localStorage.setItem('nosso_chat_emojis', JSON.stringify(customEmojis));
-        document.getElementById('new-emoji-url').value = '';
-        loadEmojisUI();
-    }
-});
+            if (arquivos.length === 0) {
+                emojiList.innerHTML = '<p style="color: var(--rex-texto-muted); font-size: 12px; grid-column: span 4; text-align: center;">Nenhum emoji na pasta emojisREX ainda!</p>';
+                return;
+            }
+
+            arquivos.forEach(arquivo => {
+                const img = document.createElement('img');
+                img.src = `/emojisREX/${arquivo}`;
+                img.className = 'custom-emoji-item';
+                img.title = arquivo;
+                
+                // Quando clicar no emoji da pasta, ele envia direto como imagem no chat!
+                img.onclick = () => {
+                    const msg = {
+                        id: Date.now().toString(),
+                        type: 'image',
+                        sender: myNameInput.value || 'Eu',
+                        color: myColorInput.value || '#5865F2',
+                        avatar: myAvatarInput.value.trim() || '',
+                        content: `/emojisREX/${arquivo}`,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        replyTo: respondingTo
+                    };
+                    publishMessage(msg);
+                    limparResposta();
+                    emojiModal.classList.add('hidden');
+                };
+
+                emojiList.appendChild(img);
+            });
+        })
+        .catch(err => console.error("Erro ao carregar emojis da pasta:", err));
+}
 
 const settingsModal = document.getElementById('settings-modal');
 document.getElementById('btn-open-settings').addEventListener('click', () => {

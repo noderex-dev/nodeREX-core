@@ -412,24 +412,30 @@ body {
 }
 
 .emoji-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    max-height: 160px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    max-height: 240px;
     overflow-y: auto;
+    padding: 4px;
 }
 
 .custom-emoji-item {
-    font-size: 22px;
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
     cursor: pointer;
-    padding: 6px;
-    border-radius: 6px;
+    padding: 4px;
+    border-radius: 8px;
     background: var(--rex-escuro);
-    transition: 0.1s;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: 0.15s;
 }
+
 .custom-emoji-item:hover {
     background-color: var(--rex-verde-vibrante);
-    transform: scale(1.1);
+    border-color: var(--rex-laranja);
+    transform: scale(1.12);
 }
 
 .add-custom-emoji {
@@ -574,4 +580,23 @@ body {
 
 #folder-files-list .file-row:hover {
     border-color: var(--rex-laranja);
+}
+
+/* Personalizar barra de rolagem da grade de emojis */
+.emoji-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.emoji-grid::-webkit-scrollbar-track {
+    background: var(--rex-escuro);
+    border-radius: 4px;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb {
+    background: var(--rex-laranja);
+    border-radius: 4px;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--rex-laranja-hover);
 }
