@@ -2,18 +2,17 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
+const path = require('path');
 
 // >>> PALAVRA-CHAVE NO NOTEPAD++: GOOGLE_AI_SETUP
 const { GoogleGenAI } = require('@google/genai');
-// Substitua 'SUA_API_KEY_AQUI' pela sua chave da API do Google Gemini quando for usar
-const ai = new GoogleGenAI({ apiKey: 'SUA_API_KEY_AQUI' });
+const ai = new GoogleGenAI({ apiKey: 'SUA_CHAVE_API_AQUI_' });
 
-// Função que faz a IA responder lendo o histórico completo da conversa
 async function perguntarParaAmiga(historicoDoChat, mensagemDoUsuario) {
     try {
         const promptDoSistema = "Você é uma amiga muito amigável, brincalhona, super tagarela e adora conversar bastante. Você está em um chat chamado node.REX++. Responda de forma natural, descontraída, mantendo o contexto de tudo o que está sendo conversado na conversa.";
 
-        // Usamos o formato estruturado correto exigido pelo SDK do Gemini
         const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
             contents: [
@@ -32,12 +31,9 @@ async function perguntarParaAmiga(historicoDoChat, mensagemDoUsuario) {
             }
         });
 
-        // Garantimos a extração correta do texto da resposta
         return response.text;
     } catch (error) {
         console.error("Erro real na API do Gemini:", error);
-        // Deixando o erro exposto no chat temporariamente se quiser debugar, 
-        // ou mantendo a frase, mas agora vai passar direto daqui.
         return "ERRO DO SISTEMA: " + error.message;
     }
 }
@@ -48,13 +44,11 @@ const io = new Server(server, {
     maxHttpBufferSize: 1e8 // 100MB para imagens e áudios[cite: 3]
 });
 
-// Configura o Banco de Dados Local (Arquivo chat.db)
 const db = new sqlite3.Database('./chat.db', (err) => {
     if (err) console.error('Erro ao abrir o banco de dados', err.message);
     else console.log('Conectado ao banco de dados local SQLite.');
 });
 
-// Cria a tabela de mensagens se ela não existir
 db.run(`CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT,
@@ -65,7 +59,6 @@ db.run(`CREATE TABLE IF NOT EXISTS messages (
     time TEXT
 )`);
 
-// Cria a tabela de reações se ela não existir
 db.run(`CREATE TABLE IF NOT EXISTS reactions (
     messageId TEXT,
     emoji TEXT,
@@ -73,11 +66,49 @@ db.run(`CREATE TABLE IF NOT EXISTS reactions (
 )`);
 
 app.use(express.static(__dirname));
+app.use(express.json());
 
-app.use('/midias', express.static('public_midia')); // <- Código de Pasta
+app.post('/api/login', (req, res) => {
+    const { chave, senha } = req.body;
+    try {
+        const chavesPath = path.join(__dirname, 'chaves.js');
+        const conteudoChaves = fs.readFileSync(chavesPath, 'utf8');
+        
+        const match = conteudoChaves.match(/const\s+BANCO_DE_CHAVES\s*=\s*({[\s\S]*?});/);
+        if (!match) {
+            return res.json({ sucesso: false, erro: "Erro interno no banco de chaves." });
+        }
+        
+        const BANCO_DE_CHAVES = eval('(' + match[1] + ')');
 
-// Configuração da Pasta de Emojis REX
-app.use('/emojisREX', express.static('emojisREX'));
+        if (!BANCO_DE_CHAVES[chave]) {
+            return res.json({ sucesso: false, erro: "Chave inválida ou não encontrada." });
+        }
+
+        const dados = BANCO_DE_CHAVES[chave];
+        if (dados.senha !== senha) {
+            return res.json({ sucesso: false, erro: "Senha incorreta." });
+        }
+
+        const hoje = new Date();
+        const pData = dados.dataCriacao.split("-");
+        const dataCriacao = new Date(pData[0], pData[1] - 1, pData[2]);
+        const diasPassados = Math.floor((hoje - dataCriacao) / (1000 * 60 * 60 * 24));
+        const diasRestantes = dados.diasValidade - diasPassados;
+
+        if (diasRestantes <= 0) {
+            return res.json({ sucesso: false, erro: "Sua chave expirou!" });
+        }
+
+        res.json({ sucesso: true, diasRestantes: diasRestantes });
+    } catch (e) {
+        res.json({ sucesso: false, erro: "Erro ao processar login." });
+    }
+});
+
+// Correção da rota estática para corresponder ao front-end (/public_midia)
+app.use('/public_midia', express.static(path.join(__dirname, 'public_midia')));
+app.use('/emojisREX', express.static(path.join(__dirname, 'emojisREX')));
 
 app.get('/api/emojis-rex', (req, res) => {
     const diretorioEmojis = path.join(__dirname, 'emojisREX');
@@ -90,18 +121,16 @@ app.get('/api/emojis-rex', (req, res) => {
         if (err) {
             return res.status(500).json({ erro: 'Erro ao ler a pasta de emojis' });
         }
-        // Filtra apenas imagens para aparecerem no painel
         const imagens = arquivos.filter(file => /\.(png|gif|webp|jpg|jpeg)$/i.test(file));
         res.json(imagens);
     });
 });
 
-const fs = require('fs');
-const path = require('path');
-
-// Rota que lista os arquivos que você colocou na pasta public_midia
 app.get('/api/midias', (req, res) => {
     const diretorioPasta = path.join(__dirname, 'public_midia');
+    if (!fs.existsSync(diretorioPasta)) {
+        fs.mkdirSync(diretorioPasta, { recursive: true });
+    }
     fs.readdir(diretorioPasta, (err, arquivos) => {
         if (err) {
             return res.status(500).json({ erro: 'Erro ao ler a pasta' });
@@ -110,13 +139,11 @@ app.get('/api/midias', (req, res) => {
     });
 });
 
-// Lista em memória para guardar os usuários conectados
 let usuariosOnline = {};
 
 io.on('connection', (socket) => {
     console.log('Um usuário se conectou ao servidor.');
 
-    // O usuário avisa seu nick/foto assim que conecta ou atualiza os inputs
     socket.on('atualizar_usuario', (userData) => {
         usuariosOnline[socket.id] = {
             id: socket.id,
@@ -127,7 +154,6 @@ io.on('connection', (socket) => {
         io.emit('lista_usuarios_update', Object.values(usuariosOnline));
     });
 
-    // Envia o histórico completo com as reações salvas assim que entra ou dá F5
     db.all(`SELECT * FROM messages ORDER BY id ASC`, [], (err, messages) => {
         if (err) return;
         db.all(`SELECT * FROM reactions`, [], (errReactions, reactions) => {
@@ -135,7 +161,7 @@ io.on('connection', (socket) => {
                 messages.forEach(msg => {
                     msg.reactions = {};
                     reactions.forEach(r => {
-                        if (r.messageId == msg.id || r.messageId == (msg.time + msg.sender)) {
+                        if (r.messageId == msg.id) {
                             if (!msg.reactions[r.emoji]) {
                                 msg.reactions[r.emoji] = [];
                             }
@@ -145,21 +171,20 @@ io.on('connection', (socket) => {
                 });
             }
             socket.emit('init_history', messages);
-            // Envia também a lista de online atual para quem acabou de entrar
             socket.emit('lista_usuarios_update', Object.values(usuariosOnline));
         });
     });
 
-    // Quando receber uma mensagem, salva no banco e reenvia para todos
     socket.on('chat_message', (msgData) => {
         const query = `INSERT INTO messages (type, sender, color, avatar, content, time) VALUES (?, ?, ?, ?, ?, ?)`;
         const params = [msgData.type, msgData.sender, msgData.color, msgData.avatar, msgData.content, msgData.time];
 
         db.run(query, params, async function(err) {
             if (!err) {
-                io.emit('chat_message', { id: this.lastID, ...msgData });
-				
-				if (msgData.content && msgData.content.toLowerCase().includes('@ia')) {
+                const savedMessageId = this.lastID;
+                io.emit('chat_message', { id: savedMessageId, ...msgData });
+                
+                if (msgData.content && msgData.content.toLowerCase().includes('@ia')) {
                     db.all(`SELECT sender, content FROM messages ORDER BY id DESC LIMIT 10`, [], async (err, rows) => {
                         let historicoTexto = "";
                         if (!err && rows) {
@@ -188,7 +213,7 @@ io.on('connection', (socket) => {
                             }
                         );
                     });
-				}
+                }
             }
         });
     });
@@ -201,19 +226,14 @@ io.on('connection', (socket) => {
             }
         });
     });
-	
-	// Evento para excluir mensagem do chat e do banco SQLite
+    
     socket.on('delete_message', (messageId) => {
-        // Apaga do banco de mensagens
         db.run(`DELETE FROM messages WHERE id = ?`, [messageId], (err) => {
             if (err) {
                 console.error("Erro ao deletar mensagem do banco:", err.message);
                 return;
             }
-            
-            // Apaga também as reações vinculadas a essa mensagem para limpar o banco
             db.run(`DELETE FROM reactions WHERE messageId = ?`, [messageId], () => {
-                // Avisa todos os clientes conectados (incluindo quem enviou) para sumir com a mensagem da tela
                 io.emit('message_deleted', messageId);
             });
         });
@@ -224,11 +244,8 @@ io.on('connection', (socket) => {
         delete usuariosOnline[socket.id];
         io.emit('lista_usuarios_update', Object.values(usuariosOnline));
     });
-	
-	
-	
-	
-	socket.on('entrar-voz', () => {
+
+    socket.on('entrar-voz', () => {
         socket.broadcast.emit('usuario-entrou-voz', socket.id);
     });
 
@@ -247,13 +264,6 @@ io.on('connection', (socket) => {
     socket.on('candidate', (data) => {
         socket.to(data.target).emit('candidate', { candidate: data.candidate, sender: socket.id });
     });
-	
-	
-	
-	
-	
-	
-	
 });
 
 server.listen(3000, () => {

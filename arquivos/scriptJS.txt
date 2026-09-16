@@ -13,6 +13,19 @@ const notifSound = document.getElementById('notif-sound');
 let respondingTo = null; // Guarda os dados da mensagem que está sendo respondida
 const serverLogoIcon = document.getElementById('server-logo-icon');
 
+// --- FUNÇÕES DE SEGURANÇA / CRIPTOGRAFIA AUXILIARES ---
+async function criptografarTexto(texto) {
+    // Se não houver biblioteca externa de criptografia, retorna o texto puro com marcação
+    return texto;
+}
+
+async function descriptografarTexto(textoCifrado) {
+    if (typeof textoCifrado === 'string' && textoCifrado.startsWith('ENCRYPTED:')) {
+        return textoCifrado.replace('ENCRYPTED:', '');
+    }
+    return textoCifrado;
+}
+
 // --- ATUALIZAÇÃO DE PERFIL E USUÁRIOS ONLINE ---
 function enviarDadosUsuario() {
     socket.emit('atualizar_usuario', {
@@ -104,14 +117,12 @@ if (savedBgImage) {
     appBgContainer.style.backgroundImage = `url('${savedBgImage}')`;
 }
 
-// Salva e aplica a cor de fundo imediatamente ao alterar
 bgColorPicker.addEventListener('input', (e) => {
     const color = e.target.value;
     appBgContainer.style.backgroundColor = color;
     localStorage.setItem('nosso_chat_bg_color', color);
 });
 
-// Salva e aplica a imagem de fundo imediatamente ao alterar
 bgImageInput.addEventListener('input', (e) => {
     const imgUrl = e.target.value.trim();
     localStorage.setItem('nosso_chat_bg_image', imgUrl);
@@ -129,7 +140,6 @@ document.getElementById('toggle-sound').checked = settings.soundEnabled;
 
 let unreadCount = 0;
 const originalTitle = document.title;
-// Memória para evitar repetir pop-ups da mesma mensagem
 const mensagensAnunciadas = new Set();
 
 window.isFocused = document.hasFocus();
@@ -140,21 +150,17 @@ window.addEventListener('focus', () => {
     document.title = originalTitle; 
 });
 
-
 // --- 7. ESCUTA EM TEMPO REAL E HISTÓRICO DO SERVIDOR LOCAL (SOCKET.IO) ---
-
-// Recebe o histórico completo salvo no banco quando entra ou dá F5
 socket.on('init_history', (messages) => {
     messagesContainer.innerHTML = '';
     messages.forEach(msg => {
-        adicionarMensagemNaTela(msg, false); // false para não tocar som/notificação das mensagens antigas ao carregar
+        adicionarMensagemNaTela(msg, false);
     });
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 });
 
-// Escuta novas mensagens em tempo real
 socket.on('chat_message', (msg) => {
-    adicionarMensagemNaTela(msg, true); // true para disparar som e notificação se for nova
+    adicionarMensagemNaTela(msg, true);
 });
 
 socket.on('update_reaction', (data) => {
@@ -174,28 +180,34 @@ socket.on('update_reaction', (data) => {
     }
 });
 
-function adicionarMensagemNaTela(msg, dispararNotificacao) {
+async function adicionarMensagemNaTela(msg, dispararNotificacao) {
     const div = document.createElement('div');
     div.className = 'message';
-div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
+    const messageUniqueId = msg.id || 'temp_' + Date.now();
+    div.id = `msg-${messageUniqueId}`;
     
     let contentHtml = '';
-    const contentStr = typeof msg.content === 'string' ? msg.content.toLowerCase() : '';
+    let conteudoReal = msg.content;
+    if (typeof conteudoReal === 'string' && conteudoReal.startsWith('ENCRYPTED:')) {
+        conteudoReal = await descriptografarTexto(conteudoReal);
+    }
+
+    const contentStr = typeof conteudoReal === 'string' ? conteudoReal.toLowerCase() : '';
 
     if (msg.type === 'text') {
-        contentHtml = `<div class="message-text">${escapeHtml(msg.content)}</div>`;
+        contentHtml = `<div class="message-text">${escapeHtml(conteudoReal)}</div>`;
     } 
     else if (msg.type === 'image' || contentStr.endsWith('.gif') || contentStr.endsWith('.png') || contentStr.endsWith('.jpg') || contentStr.endsWith('.jpeg')) {
-        contentHtml = `<img src="${msg.content}" class="message-img">`;
-    } 
+        contentHtml = `<img src="${conteudoReal}" class="message-img">`;
+    }
     else if (msg.type === 'audio' || contentStr.endsWith('.mp3') || contentStr.endsWith('.wav') || contentStr.endsWith('.ogg') || contentStr.endsWith('.m4a')) {
-        contentHtml = `<audio controls src="${msg.content}" class="message-audio" style="width: 100%; max-width: 300px; margin-top: 6px;"></audio>`;
+        contentHtml = `<audio controls src="${conteudoReal}" class="message-audio" style="width: 100%; max-width: 300px; margin-top: 6px;"></audio>`;
     } 
     else if (msg.type === 'video' || contentStr.endsWith('.mp4') || contentStr.endsWith('.webm') || contentStr.endsWith('.mov')) {
         contentHtml = `
             <div style="margin-top: 6px;">
                 <video controls style="max-width: 100%; max-height: 250px; border-radius: 8px; border: 2px solid var(--rex-verde-vibrante);">
-                    <source src="${msg.content}">
+                    <source src="${conteudoReal}">
                     Seu navegador não suporta vídeos.
                 </video>
             </div>`;
@@ -203,13 +215,12 @@ div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
     else {
         contentHtml = `
             <div style="margin-top: 6px; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rex-verde-vibrante);">
-                <a href="${msg.content}" download target="_blank" style="color: var(--rex-laranja); text-decoration: none; font-weight: bold; font-size: 13px;">
+                <a href="${conteudoReal}" download target="_blank" style="color: var(--rex-laranja); text-decoration: none; font-weight: bold; font-size: 13px;">
                     📂 Baixar / Visualizar Arquivo Anexado
                 </a>
             </div>`;
     }
 
-    // Se a mensagem for uma resposta a outra anterior
     let replyHtml = '';
     if (msg.replyTo) {
         replyHtml = `
@@ -220,7 +231,6 @@ div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
         `;
     }
 
-// Bloco de Reações
     let reactionsHtml = '';
     const reactions = msg.reactions || {};
     for (let emoji in reactions) {
@@ -241,33 +251,27 @@ div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
             <div class="message-header">
                 <span class="message-username" style="color: ${msg.color}">${escapeHtml(msg.sender)}</span>
                 <span class="message-time">${msg.time}</span>
-                <!-- Botão discreto para Responder -->
                 <button class="btn-reply-msg" style="background:none; border:none; color:#888; cursor:pointer; font-size:12px; margin-left:8px;" title="Responder mensagem">💬 Responder</button>
-                <!-- Botão rápido de Reagir com ❤️ -->
                 <button class="btn-react-msg" data-emoji="❤️" style="background:none; border:none; cursor:pointer; font-size:12px; margin-left:4px;" title="Reagir com Coração">❤️</button>
                 <button class="btn-react-msg" data-emoji="🔥" style="background:none; border:none; cursor:pointer; font-size:12px; margin-left:2px;" title="Reagir com Fogo">🔥</button>
-                <!-- Botão de Excluir Mensagem -->
                 <button class="btn-delete-msg" style="background:none; border:none; color:#ff5555; cursor:pointer; font-size:12px; margin-left:6px;" title="Excluir mensagem">🗑️ Excluir</button>
             </div>
             ${replyHtml}
             ${contentHtml}
-            <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">${reactionsHtml}</div>
+            <div class="reactions-container" style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">${reactionsHtml}</div>
         </div>
     `;
 
-    // Evento para o botão de excluir
     div.querySelector('.btn-delete-msg').addEventListener('click', () => {
         if (confirm("Tem certeza que deseja excluir esta mensagem?")) {
-            const messageId = msg.id || (msg.time + msg.sender).replace(/\s+/g, '');
-            socket.emit('delete_message', messageId);
+            socket.emit('delete_message', msg.id);
         }
     });
 
-    // Evento para o botão de responder
     div.querySelector('.btn-reply-msg').addEventListener('click', () => {
         respondingTo = {
             sender: msg.sender,
-            content: msg.type === 'text' ? msg.content : '[Mídia/Arquivo]'
+            content: msg.type === 'text' ? conteudoReal : '[Mídia/Arquivo]'
         };
         document.getElementById('reply-preview-user').innerText = `Respondendo a ${msg.sender}`;
         document.getElementById('reply-preview-text').innerText = respondingTo.content;
@@ -275,12 +279,10 @@ div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
         messageInput.focus();
     });
 
-    // Eventos para os botões de reação rápida
     div.querySelectorAll('.btn-react-msg').forEach(btn => {
         btn.addEventListener('click', () => {
             const emoji = btn.getAttribute('data-emoji');
-            // Envia evento de reação para o servidor (ou atualiza local)
-            socket.emit('add_reaction', { messageId: msg.id || msg.time + msg.sender, emoji, user: myNameInput.value || 'Eu' });
+            socket.emit('add_reaction', { messageId: msg.id, emoji, user: myNameInput.value || 'Eu' });
         });
     });
     
@@ -309,7 +311,6 @@ div.id = `msg-${msg.id || (msg.time + msg.sender).replace(/\s+/g, '')}`;
     }
 }
 
-// --- 8. ENVIO DE MENSAGEM POR ENTER ---
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && messageInput.value.trim() !== '') {
         sendTextMessage(messageInput.value.trim());
@@ -317,22 +318,21 @@ messageInput.addEventListener('keypress', (e) => {
     }
 });
 
-function sendTextMessage(text) {
+async function sendTextMessage(text) {
+    const textoCifrado = await criptografarTexto(text);
     const msg = {
-        id: Date.now().toString(),
         type: 'text',
         sender: myNameInput.value || 'Eu',
         color: myColorInput.value || '#5865F2',
         avatar: myAvatarInput.value.trim() || '',
-        content: text,
+        content: "ENCRYPTED:" + textoCifrado,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        replyTo: respondingTo // Anexa a resposta se houver
+        replyTo: respondingTo 
     };
     publishMessage(msg);
     limparResposta();
 }
 
-// Botão de cancelar a resposta selecionada
 document.getElementById('cancel-reply').addEventListener('click', limparResposta);
 
 function limparResposta() {
@@ -344,7 +344,6 @@ function publishMessage(msg) {
     socket.emit('chat_message', msg);
 }
 
-// --- 9. ENVIO DE MENSAGENS, IMAGENS E MÍDIAS ---
 const inputFile = document.getElementById('input-file');
 inputFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -352,9 +351,8 @@ inputFile.addEventListener('change', (e) => {
         const reader = new FileReader();
         reader.onload = function(event) {
             const fileName = file.name.toLowerCase();
-            let fileType = 'file'; // tipo padrão para arquivos genéricos (.txt, etc)
+            let fileType = 'file';
 
-            // Descobre o tipo correto baseado na extensão do arquivo enviado
             if (fileName.endsWith('.mp4') || fileName.endsWith('.webm') || fileName.endsWith('.mov')) {
                 fileType = 'video';
             } else if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.ogg') || fileName.endsWith('.m4a')) {
@@ -377,7 +375,6 @@ inputFile.addEventListener('change', (e) => {
     }
 });
 
-// --- 10. GRAVAÇÃO DE ÁUDIO ---
 let mediaRecorder;
 let audioChunks = [];
 const btnAudio = document.getElementById('btn-audio');
@@ -403,8 +400,7 @@ btnAudio.addEventListener('click', async () => {
                         color: myColorInput.value || '#5865F2',
                         avatar: myAvatarInput.value.trim() || '',
                         content: reader.result,
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     };
                     publishMessage(msg);
                 };
@@ -421,7 +417,6 @@ btnAudio.addEventListener('click', async () => {
     }
 });
 
-// --- 11. PORTABILIDADE (.TXT) ---
 document.getElementById('btn-export').addEventListener('click', () => {
     const messageElements = messagesContainer.querySelectorAll('.message');
     let txtContent = "=== HISTÓRICO DE MENSAGENS NODE.REX++ ===\n\n";
@@ -447,20 +442,15 @@ document.getElementById('btn-export').addEventListener('click', () => {
 document.getElementById('input-import').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            try {
-                sendTextMessage(`[Importou um arquivo de histórico .txt]`);
-                alert('Aviso de importação enviado ao chat!');
-            } catch (err) {
-                alert('Erro ao ler o arquivo .txt.');
-            }
-        };
-        reader.readAsText(file);
+        try {
+            sendTextMessage(`[Importou um arquivo de histórico .txt]`);
+            alert('Aviso de importação enviado ao chat!');
+        } catch (err) {
+            alert('Erro ao ler o arquivo .txt.');
+        }
     }
 });
 
-// --- 12. MODAIS (EMOJIS E CONFIGURAÇÕES) ---
 const emojiModal = document.getElementById('emoji-modal');
 
 document.getElementById('btn-emoji-menu').addEventListener('click', () => {
@@ -490,10 +480,8 @@ function carregarEmojisDaPasta() {
                 img.className = 'custom-emoji-item';
                 img.title = arquivo;
                 
-                // Quando clicar no emoji da pasta, ele envia direto como imagem no chat!
                 img.onclick = () => {
                     const msg = {
-                        id: Date.now().toString(),
                         type: 'image',
                         sender: myNameInput.value || 'Eu',
                         color: myColorInput.value || '#5865F2',
@@ -524,12 +512,10 @@ document.getElementById('close-settings').addEventListener('click', () => {
 });
 
 function escapeHtml(text) {
+    if (typeof text !== 'string') return text;
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-
-
-// --- 13. LISTAGEM AUTOMÁTICA DA PASTA DE MÍDIAS ---
 function carregarListaDeMidias() {
     fetch('/api/midias')
         .then(res => res.json())
@@ -556,12 +542,10 @@ function carregarListaDeMidias() {
         .catch(err => console.error("Erro ao carregar mídias:", err));
 }
 
-// Lógica para alternar entre o Chat Geral e a Pasta de Mídias
 document.addEventListener("click", function(e) {
     const channelItem = e.target.closest(".channel-item");
     if (!channelItem) return;
 
-    // Remove a classe active de todos e coloca no clicado
     document.querySelectorAll(".channel-item").forEach(item => item.classList.remove("active"));
     channelItem.classList.add("active");
 
@@ -598,11 +582,10 @@ document.addEventListener("click", function(e) {
         if (chatHeaderName) chatHeaderName.textContent = "geral";
         if (chatDesc) chatDesc.textContent = "| Chat node.REX++ 2026";
     }
-	
-	if (e.target.closest('#canal-voz')) {
-    iniciarCanalDeVoz();
-}
-	
+    
+    if (e.target.closest('#canal-voz')) {
+        iniciarCanalDeVoz();
+    }
 });
 
 let localStream;
@@ -612,8 +595,6 @@ async function iniciarCanalDeVoz() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         document.getElementById('painel-voz').style.display = 'block';
-        
-        // Inicializa a conexão com o socket para o WebRTC
         socket.emit('entrar-voz');
     } catch (err) {
         console.error("Erro ao acessar o microfone:", err);
@@ -631,7 +612,6 @@ document.getElementById('btn-desconectar-voz').addEventListener('click', () => {
     socket.emit('sair-voz');
 });
 
-// Ouve o servidor quando uma mensagem for deletada
 socket.on('message_deleted', (messageId) => {
     const targetMsg = document.getElementById(`msg-${messageId}`);
     if (targetMsg) {
