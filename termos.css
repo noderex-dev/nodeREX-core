@@ -1,0 +1,78 @@
+/* --- ESTILO DOS TERMOS - CONVERSANDO COM O NODEREX++ --- */
+:root {
+    --bg-color: #f4f1ea;        /* Tom de papel antigo / cru */
+    --text-color: #1a1a1a;      /* Preto fosco para leitura */
+    --accent-green: #2d5a27;    /* Verde inspirado no logo */
+    --accent-orange: #b35900;   /* Laranja/terroso inspirado no logo */
+    --border-color: #d3cbbd;    /* Linhas pontilhadas ou cinza-terra */
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: monospace, monospace; /* Mantendo a identidade terminal/código */
+    line-height: 1.6;
+    margin: 0;
+    padding: 40px 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.terms-container {
+    max-width: 700px;
+    width: 100%;
+    background: #fffdf9;
+    padding: 40px;
+    border: 1px solid var(--border-color);
+    box-shadow: 4px 4px 0px var(--border-color);
+}
+
+h1 {
+    font-size: 1.5rem;
+    color: var(--accent-green);
+    margin-top: 0;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+h2 {
+    font-size: 1.1rem;
+    color: var(--accent-green);
+    margin-top: 30px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+p, li {
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
+ul {
+    padding-left: 20px;
+    margin-bottom: 15px;
+}
+
+strong {
+    color: var(--accent-orange);
+}
+
+/* Botão rústico idêntico ao do index */
+.btn-voltar {
+    display: inline-block;
+    background-color: var(--accent-green);
+    color: #fff;
+    padding: 10px 15px;
+    text-decoration: none;
+    font-weight: bold;
+    border: 2px solid #1a1a1a;
+    margin-top: 25px;
+    box-shadow: 2px 2px 0px #1a1a1a;
+    transition: background-color 0.2s;
+}
+
+.btn-voltar:hover {
+    background-color: var(--accent-orange);
+}
